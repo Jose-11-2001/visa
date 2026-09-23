@@ -180,4 +180,21 @@ public class StudentScreen {
             status.setText("Export error: " + ex.getMessage());
         }
     }
+
+    private void startRecording(TextArea transcript, Label status) {
+        System.out.println(">>> startRecording called");
+        try {
+            System.out.println(">>> calling recorder.start()");
+            recorder.start();
+            System.out.println(">>> recorder.start() returned OK");
+            isRecording = true;
+            recordBtn.setText("Stop Answering");
+            status.setText("Recording... speak your answer.");
+            transcript.setText("(recording)");
+        } catch (Exception ex) {
+            System.out.println(">>> Mic error: " + ex);
+            ex.printStackTrace();
+            status.setText("Mic error: " + ex.getMessage());
+        }
+    }
 }
