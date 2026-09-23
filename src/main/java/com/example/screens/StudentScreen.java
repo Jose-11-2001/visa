@@ -148,7 +148,9 @@ public class StudentScreen {
             new Thread(() -> {
                 try {
                     TranscriptionService ts = new TranscriptionService(MODEL_PATH);
-                    String text = ts.transcribe(audio);
+                    String text = ts.transcribe(
+                            audio,
+                            recorder.getActualFormat().getSampleRate());
                     ts.close();
                     Platform.runLater(() -> {
                         transcript.setText(text);
