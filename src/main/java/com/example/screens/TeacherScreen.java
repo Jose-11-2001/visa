@@ -17,14 +17,10 @@ public class TeacherScreen {
         title.setFont(Font.font("Arial", FontWeight.BOLD, 36));
 
         BigButton uploadBtn = new BigButton("Upload Question PDF");
-        uploadBtn.setOnAction(e ->
-            System.out.println("TODO: open upload dialog")
-        );
+        uploadBtn.setOnAction(e -> System.out.println("TODO: open upload dialog"));
 
         BigButton reviewBtn = new BigButton("Review Submissions");
-        reviewBtn.setOnAction(e ->
-            System.out.println("TODO: open review screen")
-        );
+        reviewBtn.setOnAction(e -> App.navigate(new ReviewAnswersScreen().build()));
 
         BigButton back = BigButton.accent("Back to Home");
         back.setOnAction(e -> App.navigate(new LandingScreen().build()));
