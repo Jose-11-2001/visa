@@ -22,7 +22,6 @@ public class AudioRecorder {
         if (AudioSystem.isLineSupported(info))
             return REQUESTED;
 
-        // Try common fallbacks
         float[] rates = { 16000f, 44100f, 48000f, 22050f, 8000f };
         for (float rate : rates) {
             AudioFormat candidate = new AudioFormat(
