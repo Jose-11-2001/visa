@@ -37,7 +37,6 @@ public class StudentScreen {
     private BigButton recordBtn;
     private BigButton nextBtn;
 
-    // Vosk model path — change to your actual path
     private static final String MODEL_PATH = "D:/Projects/visa/models/vosk-model-small-en-us-0.15";
 
     public Parent build() {
@@ -127,13 +126,18 @@ public class StudentScreen {
     }
 
     private void startRecording(TextArea transcript, Label status) {
+        System.out.println(">>> startRecording called");
         try {
+            System.out.println(">>> calling recorder.start()");
             recorder.start();
+            System.out.println(">>> recorder.start() returned OK");
             isRecording = true;
             recordBtn.setText("Stop Answering");
             status.setText("Recording... speak your answer.");
             transcript.setText("(recording)");
         } catch (Exception ex) {
+            System.out.println(">>> Mic error: " + ex);
+            ex.printStackTrace();
             status.setText("Mic error: " + ex.getMessage());
         }
     }
@@ -169,32 +173,13 @@ public class StudentScreen {
 
     private void exportPdf(Label status) {
         try {
-            // Save structured answers for the teacher
             ExamStorage.save(questions);
-
             File out = new File("D:/Projects/visa/answers.pdf");
             writer.writeAnswersPdf(questions, out);
             status.setText("Saved: " + out.getAbsolutePath());
             TtsService.speak("Your answers have been saved.");
         } catch (Exception ex) {
             status.setText("Export error: " + ex.getMessage());
-        }
-    }
-
-    private void startRecording(TextArea transcript, Label status) {
-        System.out.println(">>> startRecording called");
-        try {
-            System.out.println(">>> calling recorder.start()");
-            recorder.start();
-            System.out.println(">>> recorder.start() returned OK");
-            isRecording = true;
-            recordBtn.setText("Stop Answering");
-            status.setText("Recording... speak your answer.");
-            transcript.setText("(recording)");
-        } catch (Exception ex) {
-            System.out.println(">>> Mic error: " + ex);
-            ex.printStackTrace();
-            status.setText("Mic error: " + ex.getMessage());
         }
     }
 }
