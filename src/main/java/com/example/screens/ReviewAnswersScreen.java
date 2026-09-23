@@ -2,6 +2,7 @@ package com.example.screens;
 
 import com.example.App;
 import com.example.components.BigButton;
+import com.example.components.TtsService;
 import com.example.models.Question;
 import com.example.services.ExamStorage;
 import com.example.services.ExamStorage.Submission;
@@ -68,6 +69,9 @@ public class ReviewAnswersScreen {
             for (Question q : s.questions) {
                 content.getChildren().add(buildQuestionBlock(q));
             }
+
+            TtsService.speak("Loaded submission for " + s.studentName
+                    + ". " + s.questions.size() + " answers.");
         });
 
         BigButton exportBtn = BigButton.accent("Export Marked PDF");
@@ -156,23 +160,4 @@ public class ReviewAnswersScreen {
             alert.showAndWait();
         }
     }
-}picker.setOnAction(e -> {
-    Submission s = picker.getValue();
-    if (s == null) return;
-
-    markFields.clear();
-    commentFields.clear();
-    content.getChildren().clear();
-    currentQuestions = s.questions;
-    currentStudent = s.studentName;
-
-    studentLabel.setText("Student: " + s.studentName
-            + " | Exam: " + s.examTitle);
-
-    for (Question q : s.questions) {
-        content.getChildren().add(buildQuestionBlock(q));
-    }
-
-    TtsService.speak("Loaded submission for " + s.studentName
-        + ". " + s.questions.size() + " answers.");
-});import com.example.components.TtsService;
+}
