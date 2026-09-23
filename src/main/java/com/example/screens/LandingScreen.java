@@ -23,7 +23,6 @@ public class LandingScreen {
 
         BigButton studentBtn = new BigButton("I am a Student");
         studentBtn.setOnAction(e -> App.navigate(new StudentScreen().build()));
-
         BigButton teacherBtn = BigButton.accent("I am a Teacher");
         teacherBtn.setOnAction(e -> App.navigate(new TeacherScreen().build()));
 
