@@ -20,12 +20,11 @@ public class PdfReaderService {
     }
 
     private List<Question> parseQuestions(String raw) {
-        // Matches "1.", "Q1.", "Question 1:", etc.
+        // Looser: allows whitespace before/after the number and separator
         Pattern p = Pattern.compile(
-                "(?m)^\\s*(?:Q(?:uestion)?\\s*)?(\\d+)[.):\\-]\\s+");
+                "(?m)^\\s*(?:Q(?:uestion)?\\s*)?(\\d+)\\s*[.):\\-]\\s*");
         Matcher m = p.matcher(raw);
 
-        List<Question> questions = new ArrayList<>();
         List<Integer> starts = new ArrayList<>();
         List<Integer> numbers = new ArrayList<>();
 
@@ -34,6 +33,7 @@ public class PdfReaderService {
             numbers.add(Integer.parseInt(m.group(1)));
         }
 
+        List<Question> questions = new ArrayList<>();
         if (starts.isEmpty()) {
             questions.add(new Question(1, raw.trim()));
             return questions;
