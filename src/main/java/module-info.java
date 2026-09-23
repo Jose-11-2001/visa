@@ -7,6 +7,7 @@ module com.example {
 
     exports com.example;
     exports com.example.models;
+
     exports com.example.screens;
     exports com.example.components;
     exports com.example.services; // <-- You also need to export your new service package

@@ -1,6 +1,7 @@
 package com.example.screens;
 
 import com.example.App;
+import javafx.scene.control.TextInputDialog;
 import com.example.components.AudioRecorder;
 import com.example.components.BigButton;
 import com.example.components.TtsService;
@@ -175,6 +176,25 @@ public class StudentScreen {
         try {
             ExamStorage.save(questions);
             File out = new File("D:/Projects/visa/answers.pdf");
+            writer.writeAnswersPdf(questions, out);
+            status.setText("Saved: " + out.getAbsolutePath());
+            TtsService.speak("Your answers have been saved.");
+        } catch (Exception ex) {
+            status.setText("Export error: " + ex.getMessage());
+        }
+    }
+
+    private void exportPdf(Label status) {
+        try {
+            TextInputDialog dialog = new TextInputDialog("Student");
+            dialog.setTitle("Save Submission");
+            dialog.setHeaderText("Enter the student's name:");
+            dialog.setContentText("Name:");
+            String name = dialog.showAndWait().orElse("Student");
+
+            ExamStorage.save(name, "Exam", questions);
+
+            File out = new File("D:/Projects/visa/answers_" + name + ".pdf");
             writer.writeAnswersPdf(questions, out);
             status.setText("Saved: " + out.getAbsolutePath());
             TtsService.speak("Your answers have been saved.");

@@ -8,8 +8,13 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 
 import java.io.File;
 import java.util.List;
+import java.util.Map;
 
 public class PdfWriterService {
+
+    /* ---------------------------------------------------------------- */
+    /* Original method: student answer sheet (no marks) */
+    /* ---------------------------------------------------------------- */
 
     public void writeAnswersPdf(List<Question> questions, File output)
             throws Exception {
@@ -57,6 +62,143 @@ public class PdfWriterService {
             doc.save(output);
         }
     }
+
+    /* ---------------------------------------------------------------- */
+    /* New method: teacher's marked answer sheet */
+    /* ---------------------------------------------------------------- */
+
+    /**
+     * Writes a marked PDF with the student's name, each question,
+     * the student's answer, and the teacher's marks + comment.
+     *
+     * @param studentName the student's name
+     * @param examTitle   the exam name
+     * @param questions   the list of questions with answers set
+     * @param marks       map of question number -> mark (as a String)
+     * @param comments    map of question number -> teacher comment
+     * @param output      target PDF file
+     */
+    public void writeMarkedPdf(String studentName,
+            String examTitle,
+            List<Question> questions,
+            Map<Integer, String> marks,
+            Map<Integer, String> comments,
+            File output) throws Exception {
+
+        try (PDDocument doc = new PDDocument()) {
+
+            // ---------- Cover page ----------
+            PDPage cover = new PDPage();
+            doc.addPage(cover);
+
+            PDPageContentStream cs = new PDPageContentStream(doc, cover);
+            cs.setFont(PDType1Font.HELVETICA_BOLD, 28);
+            cs.beginText();
+            cs.newLineAtOffset(60, 700);
+            cs.showText("Marked Exam Result");
+            cs.endText();
+
+            cs.setFont(PDType1Font.HELVETICA, 16);
+            cs.beginText();
+            cs.newLineAtOffset(60, 640);
+            cs.showText("Student: " + studentName);
+            cs.endText();
+
+            cs.beginText();
+            cs.newLineAtOffset(60, 610);
+            cs.showText("Exam: " + examTitle);
+            cs.endText();
+
+            cs.beginText();
+            cs.newLineAtOffset(60, 580);
+            cs.showText("Date: " + new java.util.Date());
+            cs.endText();
+
+            cs.close();
+
+            // ---------- One page per question ----------
+            for (Question q : questions) {
+                PDPage page = new PDPage();
+                doc.addPage(page);
+                cs = new PDPageContentStream(doc, page);
+
+                float y = 750;
+
+                // Question number + text
+                cs.setFont(PDType1Font.HELVETICA_BOLD, 16);
+                cs.beginText();
+                cs.newLineAtOffset(50, y);
+                cs.showText("Question " + q.getNumber());
+                cs.endText();
+                y -= 25;
+
+                cs.setFont(PDType1Font.HELVETICA, 12);
+                for (String line : wrap(q.getText(), 90)) {
+                    cs.beginText();
+                    cs.newLineAtOffset(50, y);
+                    cs.showText(line);
+                    cs.endText();
+                    y -= 16;
+                }
+                y -= 20;
+
+                // Student answer
+                cs.setFont(PDType1Font.HELVETICA_BOLD, 13);
+                cs.beginText();
+                cs.newLineAtOffset(50, y);
+                cs.showText("Student's Answer:");
+                cs.endText();
+                y -= 20;
+
+                cs.setFont(PDType1Font.HELVETICA, 12);
+                for (String line : wrap(q.getAnswer(), 90)) {
+                    cs.beginText();
+                    cs.newLineAtOffset(70, y);
+                    cs.showText(line);
+                    cs.endText();
+                    y -= 16;
+                }
+                y -= 20;
+
+                // Marks
+                String mark = marks.getOrDefault(q.getNumber(), "0");
+                cs.setFont(PDType1Font.HELVETICA_BOLD, 13);
+                cs.beginText();
+                cs.newLineAtOffset(50, y);
+                cs.showText("Marks: " + mark + " / " + q.getMaxMarks());
+                cs.endText();
+                y -= 25;
+
+                // Comment
+                String comment = comments.getOrDefault(q.getNumber(), "");
+                if (!comment.isBlank()) {
+                    cs.setFont(PDType1Font.HELVETICA_BOLD, 12);
+                    cs.beginText();
+                    cs.newLineAtOffset(50, y);
+                    cs.showText("Teacher's Comment:");
+                    cs.endText();
+                    y -= 18;
+
+                    cs.setFont(PDType1Font.HELVETICA_OBLIQUE, 12);
+                    for (String line : wrap(comment, 90)) {
+                        cs.beginText();
+                        cs.newLineAtOffset(70, y);
+                        cs.showText(line);
+                        cs.endText();
+                        y -= 16;
+                    }
+                }
+
+                cs.close();
+            }
+
+            doc.save(output);
+        }
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Helpers */
+    /* ---------------------------------------------------------------- */
 
     private String truncate(String s, int n) {
         return s.length() > n ? s.substring(0, n) + "..." : s;
