@@ -1,3 +1,7 @@
+com\example\components\BigButton.class
 module-info.class
 com\example\App.class
+com\example\screens\LandingScreen.class
 com\example\SystemInfo.class
+com\example\screens\StudentScreen.class
+com\example\screens\TeacherScreen.class
