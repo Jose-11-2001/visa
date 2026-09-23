@@ -31,13 +31,16 @@ public class ReviewAnswersScreen {
         VBox content = new VBox(20);
         content.setPadding(new Insets(20));
 
-        List<Question> questions;
+        List<Question> loaded;
         try {
-            questions = ExamStorage.load();
+            loaded = ExamStorage.load();
         } catch (Exception ex) {
             content.getChildren().add(new Label("Error loading: " + ex.getMessage()));
-            questions = List.of();
+            loaded = List.of();
         }
+
+        // Make it final for lambda capture
+        final List<Question> questions = loaded;
 
         if (questions.isEmpty()) {
             content.getChildren().add(
