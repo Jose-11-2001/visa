@@ -7,13 +7,14 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 public class PdfWriterService {
 
     /* ---------------------------------------------------------------- */
-    /* Original method: student answer sheet (no marks) */
+    /* Student answer sheet (no marks) */
     /* ---------------------------------------------------------------- */
 
     public void writeAnswersPdf(List<Question> questions, File output)
@@ -64,20 +65,9 @@ public class PdfWriterService {
     }
 
     /* ---------------------------------------------------------------- */
-    /* New method: teacher's marked answer sheet */
+    /* Teacher's marked sheet */
     /* ---------------------------------------------------------------- */
 
-    /**
-     * Writes a marked PDF with the student's name, each question,
-     * the student's answer, and the teacher's marks + comment.
-     *
-     * @param studentName the student's name
-     * @param examTitle   the exam name
-     * @param questions   the list of questions with answers set
-     * @param marks       map of question number -> mark (as a String)
-     * @param comments    map of question number -> teacher comment
-     * @param output      target PDF file
-     */
     public void writeMarkedPdf(String studentName,
             String examTitle,
             List<Question> questions,
@@ -124,7 +114,6 @@ public class PdfWriterService {
 
                 float y = 750;
 
-                // Question number + text
                 cs.setFont(PDType1Font.HELVETICA_BOLD, 16);
                 cs.beginText();
                 cs.newLineAtOffset(50, y);
@@ -142,7 +131,6 @@ public class PdfWriterService {
                 }
                 y -= 20;
 
-                // Student answer
                 cs.setFont(PDType1Font.HELVETICA_BOLD, 13);
                 cs.beginText();
                 cs.newLineAtOffset(50, y);
@@ -160,7 +148,6 @@ public class PdfWriterService {
                 }
                 y -= 20;
 
-                // Marks
                 String mark = marks.getOrDefault(q.getNumber(), "0");
                 cs.setFont(PDType1Font.HELVETICA_BOLD, 13);
                 cs.beginText();
@@ -169,9 +156,8 @@ public class PdfWriterService {
                 cs.endText();
                 y -= 25;
 
-                // Comment
                 String comment = comments.getOrDefault(q.getNumber(), "");
-                if (!comment.isBlank()) {
+                if (comment != null && !comment.isBlank()) {
                     cs.setFont(PDType1Font.HELVETICA_BOLD, 12);
                     cs.beginText();
                     cs.newLineAtOffset(50, y);
@@ -205,7 +191,7 @@ public class PdfWriterService {
     }
 
     private List<String> wrap(String text, int width) {
-        List<String> lines = new java.util.ArrayList<>();
+        List<String> lines = new ArrayList<>();
         if (text == null || text.isEmpty()) {
             lines.add("(no answer)");
             return lines;

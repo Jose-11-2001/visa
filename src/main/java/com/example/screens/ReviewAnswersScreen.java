@@ -5,16 +5,22 @@ import com.example.components.BigButton;
 import com.example.models.Question;
 import com.example.services.ExamStorage;
 import com.example.services.ExamStorage.Submission;
+import com.example.services.PdfWriterService;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
-import javafx.scene.control.*;
+import javafx.scene.control.Alert;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 
+import java.io.File;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +28,7 @@ import java.util.Map;
 public class ReviewAnswersScreen {
 
     private final Map<Integer, TextField> markFields = new HashMap<>();
+    private final Map<Integer, TextField> commentFields = new HashMap<>();
     private List<Question> currentQuestions = List.of();
     private String currentStudent = "";
 
@@ -29,7 +36,6 @@ public class ReviewAnswersScreen {
         Label title = new Label("Review Student Answers");
         title.setFont(Font.font("Arial", FontWeight.BOLD, 32));
 
-        // Dropdown of submissions
         ComboBox<Submission> picker = new ComboBox<>();
         picker.getItems().addAll(ExamStorage.listSubmissions());
         picker.setPrefWidth(500);
@@ -51,6 +57,7 @@ public class ReviewAnswersScreen {
                 return;
 
             markFields.clear();
+            commentFields.clear();
             content.getChildren().clear();
             currentQuestions = s.questions;
             currentStudent = s.studentName;
@@ -87,11 +94,18 @@ public class ReviewAnswersScreen {
         aLabel.setStyle("-fx-text-fill: #333;");
 
         TextField markField = new TextField();
-        markField.setPromptText("Marks");
+        markField.setPromptText("Marks / " + q.getMaxMarks());
         markField.setPrefWidth(100);
         markFields.put(q.getNumber(), markField);
 
-        HBox markRow = new HBox(10, new Label("Marks:"), markField);
+        TextField commentField = new TextField();
+        commentField.setPromptText("Comment (optional)");
+        commentField.setPrefWidth(400);
+        commentFields.put(q.getNumber(), commentField);
+
+        HBox markRow = new HBox(10,
+                new Label("Marks:"), markField,
+                new Label("Comment:"), commentField);
         markRow.setAlignment(Pos.CENTER_LEFT);
 
         VBox box = new VBox(8, qLabel, aLabel, markRow);
@@ -106,21 +120,40 @@ public class ReviewAnswersScreen {
             return;
         }
         try {
-            StringBuilder sb = new StringBuilder();
-            sb.append("Student: ").append(currentStudent).append("\n\n");
+            Map<Integer, String> marks = new HashMap<>();
+            Map<Integer, String> comments = new HashMap<>();
             for (Question q : currentQuestions) {
-                String mark = markFields.get(q.getNumber()) != null
-                        ? markFields.get(q.getNumber()).getText()
-                        : "";
-                sb.append("Q").append(q.getNumber()).append(": ").append(q.getText()).append("\n");
-                sb.append("Answer: ").append(q.getAnswer()).append("\n");
-                sb.append("Marks: ").append(mark).append("\n\n");
+                TextField m = markFields.get(q.getNumber());
+                if (m != null)
+                    marks.put(q.getNumber(), m.getText().isBlank() ? "0" : m.getText());
+
+                TextField c = commentFields.get(q.getNumber());
+                if (c != null)
+                    comments.put(q.getNumber(), c.getText());
             }
-            String out = "D:/Projects/visa/marked_" + currentStudent + ".txt";
-            java.nio.file.Files.writeString(java.nio.file.Path.of(out), sb.toString());
-            System.out.println("Saved: " + out);
+
+            String safeName = currentStudent.replaceAll("[^a-zA-Z0-9_-]", "_");
+            File out = new File("D:/Projects/visa/marked_" + safeName + ".pdf");
+
+            PdfWriterService writer = new PdfWriterService();
+            writer.writeMarkedPdf(currentStudent, "Exam",
+                    currentQuestions, marks, comments, out);
+
+            System.out.println("Saved: " + out.getAbsolutePath());
+
+            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+            alert.setTitle("Export Complete");
+            alert.setHeaderText("Marked PDF saved");
+            alert.setContentText(out.getAbsolutePath());
+            alert.showAndWait();
+
         } catch (Exception ex) {
             ex.printStackTrace();
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Export Failed");
+            alert.setHeaderText("Could not write the PDF");
+            alert.setContentText(ex.getMessage());
+            alert.showAndWait();
         }
     }
 }
