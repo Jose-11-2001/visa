@@ -4,13 +4,12 @@ import com.example.App;
 import com.example.components.BigButton;
 import com.example.models.Question;
 import com.example.services.ExamStorage;
+import com.example.services.ExamStorage.Submission;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
-import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
-import javafx.scene.control.TextField;
+import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
@@ -23,45 +22,54 @@ import java.util.Map;
 public class ReviewAnswersScreen {
 
     private final Map<Integer, TextField> markFields = new HashMap<>();
+    private List<Question> currentQuestions = List.of();
+    private String currentStudent = "";
 
     public Parent build() {
         Label title = new Label("Review Student Answers");
         title.setFont(Font.font("Arial", FontWeight.BOLD, 32));
 
+        // Dropdown of submissions
+        ComboBox<Submission> picker = new ComboBox<>();
+        picker.getItems().addAll(ExamStorage.listSubmissions());
+        picker.setPrefWidth(500);
+        picker.setPromptText("Select a student submission...");
+
+        Label studentLabel = new Label("No submission selected.");
+        studentLabel.setFont(Font.font("Arial", 16));
+
         VBox content = new VBox(20);
         content.setPadding(new Insets(20));
 
-        List<Question> loaded;
-        try {
-            loaded = ExamStorage.load();
-        } catch (Exception ex) {
-            content.getChildren().add(new Label("Error loading: " + ex.getMessage()));
-            loaded = List.of();
-        }
-
-        // Make it final for lambda capture
-        final List<Question> questions = loaded;
-
-        if (questions.isEmpty()) {
-            content.getChildren().add(
-                    new Label("No submissions yet. The student must complete an exam first."));
-        } else {
-            for (Question q : questions) {
-                content.getChildren().add(buildQuestionBlock(q));
-            }
-        }
-
         ScrollPane scroll = new ScrollPane(content);
         scroll.setFitToWidth(true);
-        scroll.setPrefHeight(500);
+        scroll.setPrefHeight(420);
+
+        picker.setOnAction(e -> {
+            Submission s = picker.getValue();
+            if (s == null)
+                return;
+
+            markFields.clear();
+            content.getChildren().clear();
+            currentQuestions = s.questions;
+            currentStudent = s.studentName;
+
+            studentLabel.setText("Student: " + s.studentName
+                    + " | Exam: " + s.examTitle);
+
+            for (Question q : s.questions) {
+                content.getChildren().add(buildQuestionBlock(q));
+            }
+        });
 
         BigButton exportBtn = BigButton.accent("Export Marked PDF");
-        exportBtn.setOnAction(e -> exportMarked(questions));
+        exportBtn.setOnAction(e -> exportMarked());
 
         BigButton back = BigButton.accent("Back to Home");
         back.setOnAction(e -> App.navigate(new LandingScreen().build()));
 
-        VBox root = new VBox(16, title, scroll, exportBtn, back);
+        VBox root = new VBox(16, title, picker, studentLabel, scroll, exportBtn, back);
         root.setAlignment(Pos.CENTER);
         root.setPadding(new Insets(30));
         root.setStyle("-fx-background-color: white;");
@@ -92,19 +100,25 @@ public class ReviewAnswersScreen {
         return box;
     }
 
-    private void exportMarked(List<Question> questions) {
+    private void exportMarked() {
+        if (currentQuestions.isEmpty()) {
+            System.out.println("No submission selected.");
+            return;
+        }
         try {
             StringBuilder sb = new StringBuilder();
-            for (Question q : questions) {
-                String mark = markFields.get(q.getNumber()).getText();
+            sb.append("Student: ").append(currentStudent).append("\n\n");
+            for (Question q : currentQuestions) {
+                String mark = markFields.get(q.getNumber()) != null
+                        ? markFields.get(q.getNumber()).getText()
+                        : "";
                 sb.append("Q").append(q.getNumber()).append(": ").append(q.getText()).append("\n");
                 sb.append("Answer: ").append(q.getAnswer()).append("\n");
                 sb.append("Marks: ").append(mark).append("\n\n");
             }
-            java.nio.file.Files.writeString(
-                    java.nio.file.Path.of("D:/Projects/visa/marked_answers.txt"),
-                    sb.toString());
-            System.out.println("Saved: D:/Projects/visa/marked_answers.txt");
+            String out = "D:/Projects/visa/marked_" + currentStudent + ".txt";
+            java.nio.file.Files.writeString(java.nio.file.Path.of(out), sb.toString());
+            System.out.println("Saved: " + out);
         } catch (Exception ex) {
             ex.printStackTrace();
         }
