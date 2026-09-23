@@ -85,9 +85,15 @@ public class ExamStorage {
                     if (p.length < 2)
                         continue;
                     switch (p[0]) {
-                        case "STUDENT" -> student = p[1];
-                        case "EXAM" -> exam = p[1];
-                        case "TIME" -> time = p[1];
+                        case "STUDENT":
+                            student = p[1];
+                            break;
+                        case "EXAM":
+                            exam = p[1];
+                            break;
+                        case "TIME":
+                            time = p[1];
+                            break;
                     }
                 } else {
                     String[] p = line.split(SEP, 4);
