@@ -1,7 +1,6 @@
 package com.example.screens;
 
 import com.example.App;
-import javafx.scene.control.TextInputDialog;
 import com.example.components.AudioRecorder;
 import com.example.components.BigButton;
 import com.example.components.TtsService;
@@ -17,6 +16,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
@@ -46,6 +46,8 @@ public class StudentScreen {
 
         Label status = new Label("Click 'Load Questions PDF' to begin.");
         status.setFont(Font.font("Arial", 18));
+        status.setWrapText(true);
+        status.setMaxWidth(800);
 
         Label questionLabel = new Label("");
         questionLabel.setFont(Font.font("Arial", 22));
@@ -66,11 +68,11 @@ public class StudentScreen {
             try {
                 questions = reader.extractQuestions(pdf);
                 currentIndex = 0;
-                status.setText("Loaded " + questions.size() + " questions.");
+                updateStatus(status, "Loaded " + questions.size() + " questions.");
                 recordBtn.setDisable(false);
-                askCurrentQuestion(questionLabel);
+                askCurrentQuestion(questionLabel, status);
             } catch (Exception ex) {
-                status.setText("Error reading PDF: " + ex.getMessage());
+                updateStatus(status, "Error reading PDF: " + ex.getMessage());
             }
         });
 
@@ -97,17 +99,24 @@ public class StudentScreen {
             currentIndex++;
             transcript.clear();
             nextBtn.setDisable(true);
-            askCurrentQuestion(questionLabel);
+            askCurrentQuestion(questionLabel, status);
         });
 
         BigButton back = BigButton.accent("Back to Home");
-        back.setOnAction(e -> App.navigate(new LandingScreen().build()));
+        back.setOnAction(e -> {
+            TtsService.stop();
+            App.navigate(new LandingScreen().build());
+        });
 
         VBox root = new VBox(16, title, status, questionLabel, transcript,
                 loadBtn, recordBtn, nextBtn, back);
         root.setAlignment(Pos.CENTER);
         root.setPadding(new Insets(30));
         root.setStyle("-fx-background-color: white;");
+
+        // Welcome message when the screen opens
+        Platform.runLater(() -> TtsService.speak("Student exam. Click Load Questions PDF to begin."));
+
         return root;
     }
 
@@ -119,27 +128,33 @@ public class StudentScreen {
         return fc.showOpenDialog(null);
     }
 
-    private void askCurrentQuestion(Label questionLabel) {
+    private void updateStatus(Label status, String text) {
+        status.setText(text);
+        System.out.println(">>> " + text);
+    }
+
+    private void askCurrentQuestion(Label questionLabel, Label status) {
         Question q = questions.get(currentIndex);
         String prompt = "Question " + q.getNumber() + ". " + q.getText();
         questionLabel.setText(prompt);
-        TtsService.speak(prompt);
+        updateStatus(status,
+                "Question " + q.getNumber() + " of " + questions.size()
+                        + ". Click Start Answering when ready.");
+        TtsService.speak(prompt + ". Click Start Answering when you are ready.");
     }
 
     private void startRecording(TextArea transcript, Label status) {
-        System.out.println(">>> startRecording called");
         try {
-            System.out.println(">>> calling recorder.start()");
             recorder.start();
-            System.out.println(">>> recorder.start() returned OK");
             isRecording = true;
             recordBtn.setText("Stop Answering");
-            status.setText("Recording... speak your answer.");
+            updateStatus(status, "Recording... speak your answer.");
             transcript.setText("(recording)");
+            TtsService.speak("Recording started. Please speak your answer now. "
+                    + "Click Stop Answering when you are done.");
         } catch (Exception ex) {
-            System.out.println(">>> Mic error: " + ex);
-            ex.printStackTrace();
-            status.setText("Mic error: " + ex.getMessage());
+            updateStatus(status, "Mic error: " + ex.getMessage());
+            TtsService.speak("Microphone error. " + ex.getMessage());
         }
     }
 
@@ -148,7 +163,9 @@ public class StudentScreen {
             byte[] audio = recorder.stop();
             isRecording = false;
             recordBtn.setText("Start Answering");
+            updateStatus(status, "Processing your answer...");
             transcript.setText("Processing...");
+            TtsService.speak("Please wait. Processing your answer.");
 
             new Thread(() -> {
                 try {
@@ -160,27 +177,24 @@ public class StudentScreen {
                     Platform.runLater(() -> {
                         transcript.setText(text);
                         questions.get(currentIndex).setAnswer(text);
-                        status.setText("Answer saved. Click Next Question.");
+
+                        String spoken = text.isBlank()
+                                ? "I did not catch anything. Please try again."
+                                : "You said: " + text + ". Click Next Question to continue.";
+
+                        updateStatus(status, spoken);
+                        TtsService.speak(spoken);
                         nextBtn.setDisable(false);
                     });
                 } catch (Exception ex) {
-                    Platform.runLater(() -> transcript.setText("Transcription error: " + ex.getMessage()));
+                    Platform.runLater(() -> {
+                        transcript.setText("Transcription error: " + ex.getMessage());
+                        TtsService.speak("Transcription error.");
+                    });
                 }
             }).start();
         } catch (Exception ex) {
-            status.setText("Stop error: " + ex.getMessage());
-        }
-    }
-
-    private void exportPdf(Label status) {
-        try {
-            ExamStorage.save(questions);
-            File out = new File("D:/Projects/visa/answers.pdf");
-            writer.writeAnswersPdf(questions, out);
-            status.setText("Saved: " + out.getAbsolutePath());
-            TtsService.speak("Your answers have been saved.");
-        } catch (Exception ex) {
-            status.setText("Export error: " + ex.getMessage());
+            updateStatus(status, "Stop error: " + ex.getMessage());
         }
     }
 
@@ -196,10 +210,11 @@ public class StudentScreen {
 
             File out = new File("D:/Projects/visa/answers_" + name + ".pdf");
             writer.writeAnswersPdf(questions, out);
-            status.setText("Saved: " + out.getAbsolutePath());
-            TtsService.speak("Your answers have been saved.");
+
+            updateStatus(status, "Saved: " + out.getAbsolutePath());
+            TtsService.speak("Your answers have been saved. Thank you. You may close the app now.");
         } catch (Exception ex) {
-            status.setText("Export error: " + ex.getMessage());
+            updateStatus(status, "Export error: " + ex.getMessage());
         }
     }
 }
