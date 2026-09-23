@@ -156,4 +156,23 @@ public class ReviewAnswersScreen {
             alert.showAndWait();
         }
     }
-}
+}picker.setOnAction(e -> {
+    Submission s = picker.getValue();
+    if (s == null) return;
+
+    markFields.clear();
+    commentFields.clear();
+    content.getChildren().clear();
+    currentQuestions = s.questions;
+    currentStudent = s.studentName;
+
+    studentLabel.setText("Student: " + s.studentName
+            + " | Exam: " + s.examTitle);
+
+    for (Question q : s.questions) {
+        content.getChildren().add(buildQuestionBlock(q));
+    }
+
+    TtsService.speak("Loaded submission for " + s.studentName
+        + ". " + s.questions.size() + " answers.");
+});
