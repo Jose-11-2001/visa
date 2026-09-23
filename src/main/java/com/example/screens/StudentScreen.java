@@ -6,6 +6,7 @@ import com.example.components.BigButton;
 import com.example.components.TtsService;
 import com.example.components.TranscriptionService;
 import com.example.models.Question;
+import com.example.services.ExamStorage;
 import com.example.services.PdfReaderService;
 import com.example.services.PdfWriterService;
 
@@ -166,6 +167,9 @@ public class StudentScreen {
 
     private void exportPdf(Label status) {
         try {
+            // Save structured answers for the teacher
+            ExamStorage.save(questions);
+
             File out = new File("D:/Projects/visa/answers.pdf");
             writer.writeAnswersPdf(questions, out);
             status.setText("Saved: " + out.getAbsolutePath());
