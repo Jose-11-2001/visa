@@ -18,6 +18,7 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
@@ -38,6 +39,8 @@ public class StudentScreen {
 
     private BigButton recordBtn;
     private BigButton nextBtn;
+    private BigButton hearBtn;
+    private BigButton finishBtn;
     private Label questionLabel;
     private Label status;
     private TextArea transcript;
@@ -53,7 +56,6 @@ public class StudentScreen {
         status.setWrapText(true);
         status.setMaxWidth(800);
 
-        // Dropdown of teacher-uploaded exams
         ComboBox<String> examPicker = new ComboBox<>();
         examPicker.getItems().addAll(ExamStorage.listTemplates());
         examPicker.setPromptText("Select an exam...");
@@ -79,9 +81,22 @@ public class StudentScreen {
                 stopRecording();
         });
 
+        // NEW: replay the transcribed answer aloud
+        hearBtn = BigButton.accent("Hear My Answer");
+        hearBtn.setDisable(true);
+        hearBtn.setOnAction(e -> hearMyAnswer());
+
         nextBtn = BigButton.accent("Next Question");
         nextBtn.setDisable(true);
         nextBtn.setOnAction(e -> goNext());
+
+        // NEW: explicit "Finish & Submit" button (only on last question)
+        finishBtn = BigButton.accent("Finish & Submit");
+        finishBtn.setDisable(true);
+        finishBtn.setOnAction(e -> confirmAndSubmit());
+
+        HBox actionRow = new HBox(12, recordBtn, hearBtn, nextBtn, finishBtn);
+        actionRow.setAlignment(Pos.CENTER);
 
         BigButton back = BigButton.accent("Back to Home");
         back.setOnAction(e -> {
@@ -90,7 +105,6 @@ public class StudentScreen {
             App.navigate(new LandingScreen().build());
         });
 
-        // When teacher uploads a new exam while this screen is open, refresh
         examPicker.setOnShowing(e -> {
             examPicker.getItems().clear();
             examPicker.getItems().addAll(ExamStorage.listTemplates());
@@ -103,13 +117,12 @@ public class StudentScreen {
             loadTemplate(chosen);
         });
 
-        VBox root = new VBox(16, title, status, examPicker, questionLabel,
-                transcript, recordBtn, nextBtn, back);
+        VBox root = new VBox(14, title, status, examPicker, questionLabel,
+                transcript, actionRow, back);
         root.setAlignment(Pos.CENTER);
         root.setPadding(new Insets(30));
         root.setStyle("-fx-background-color: white;");
 
-        // Start voice command listener
         voice.setOnCommand(this::handleVoiceCommand);
         try {
             voice.start();
@@ -119,12 +132,16 @@ public class StudentScreen {
 
         Platform.runLater(() -> TtsService.speak(
                 "Student exam ready. Choose an exam from the list. " +
-                        "Then say answer to begin, stop when done, and next to continue."));
+                        "Then say answer to begin, stop when done, and next to continue. " +
+                        "Say hear my answer to hear what was written."));
 
         return root;
     }
 
-    /** Loads a teacher-saved exam template. */
+    /* ------------------------------------------------------------------ */
+    /* Template loading */
+    /* ------------------------------------------------------------------ */
+
     private void loadTemplate(String examName) {
         try {
             List<Question> qs = ExamStorage.loadTemplate(examName);
@@ -138,6 +155,8 @@ public class StudentScreen {
 
             recordBtn.setDisable(false);
             nextBtn.setDisable(true);
+            hearBtn.setDisable(true);
+            finishBtn.setDisable(true);
             transcript.clear();
 
             updateStatus("Loaded " + qs.size() + " questions from '" + examName + "'.");
@@ -146,6 +165,10 @@ public class StudentScreen {
             updateStatus("Load error: " + ex.getMessage());
         }
     }
+
+    /* ------------------------------------------------------------------ */
+    /* Voice commands */
+    /* ------------------------------------------------------------------ */
 
     private void handleVoiceCommand(String command) {
         Platform.runLater(() -> {
@@ -172,15 +195,23 @@ public class StudentScreen {
                         TtsService.speak("Question " + q.getNumber() + ". " + q.getText());
                     }
                     break;
+                case "hear":
+                    hearMyAnswer();
+                    break;
                 case "finish":
-                    if (questions != null && currentIndex + 1 >= questions.size())
-                        exportPdf();
+                case "submit":
+                    if (!finishBtn.isDisabled())
+                        confirmAndSubmit();
                     else
                         TtsService.speak("You still have more questions.");
                     break;
             }
         });
     }
+
+    /* ------------------------------------------------------------------ */
+    /* UI updates */
+    /* ------------------------------------------------------------------ */
 
     private void updateStatus(String text) {
         status.setText(text);
@@ -191,10 +222,23 @@ public class StudentScreen {
         Question q = questions.get(currentIndex);
         String prompt = "Question " + q.getNumber() + ". " + q.getText();
         questionLabel.setText(prompt);
+
+        boolean isLast = (currentIndex + 1 >= questions.size());
+        finishBtn.setDisable(!isLast);
+
         updateStatus("Question " + q.getNumber() + " of " + questions.size()
+                + (isLast ? " (last question). Say finish to submit." : "")
                 + ". Say 'answer' to begin, or 'repeat' to hear it again.");
-        TtsService.speak(prompt + ". Say answer when you are ready.");
+
+        TtsService.speak(prompt
+                + (isLast
+                        ? ". This is the last question. Say answer when ready."
+                        : ". Say answer when you are ready."));
     }
+
+    /* ------------------------------------------------------------------ */
+    /* Recording */
+    /* ------------------------------------------------------------------ */
 
     private void startRecording() {
         try {
@@ -233,13 +277,18 @@ public class StudentScreen {
                         questions.get(currentIndex).setAnswer(text);
                         voice.resume();
 
+                        hearBtn.setDisable(text.isBlank());
+
                         String spoken = text.isBlank()
                                 ? "I did not catch anything. Say answer to try again."
-                                : "You said: " + text + ". Say next to continue.";
+                                : "You said: " + text + ". Say next to continue, "
+                                        + "or say hear my answer to hear it again.";
 
                         updateStatus(spoken);
                         TtsService.speak(spoken);
-                        nextBtn.setDisable(false);
+
+                        boolean isLast = (currentIndex + 1 >= questions.size());
+                        nextBtn.setDisable(isLast);
                     });
                 } catch (Exception ex) {
                     Platform.runLater(() -> {
@@ -255,15 +304,70 @@ public class StudentScreen {
         }
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Hear my answer */
+    /* ------------------------------------------------------------------ */
+
+    private void hearMyAnswer() {
+        if (questions == null)
+            return;
+        String answer = questions.get(currentIndex).getAnswer();
+        if (answer == null || answer.isBlank()) {
+            TtsService.speak("You have not answered yet. Say answer to begin.");
+            return;
+        }
+        TtsService.speak("Your answer to question "
+                + questions.get(currentIndex).getNumber()
+                + " is: " + answer);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Navigation */
+    /* ------------------------------------------------------------------ */
+
     private void goNext() {
         if (currentIndex + 1 >= questions.size()) {
-            exportPdf();
+            confirmAndSubmit();
             return;
         }
         currentIndex++;
         transcript.clear();
         nextBtn.setDisable(true);
+        hearBtn.setDisable(true);
+        finishBtn.setDisable(true);
         askCurrentQuestion();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Submit */
+    /* ------------------------------------------------------------------ */
+
+    private void confirmAndSubmit() {
+        int answered = 0;
+        for (Question q : questions) {
+            if (q.getAnswer() != null && !q.getAnswer().isBlank())
+                answered++;
+        }
+        int unanswered = questions.size() - answered;
+
+        String msg = unanswered == 0
+                ? "All questions answered. Submit the exam now?"
+                : "You still have " + unanswered + " unanswered question(s). "
+                        + "Submit anyway?";
+
+        TtsService.speak(msg);
+
+        javafx.scene.control.Alert confirm = new javafx.scene.control.Alert(
+                javafx.scene.control.Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Submit Exam");
+        confirm.setHeaderText("Finish and submit?");
+        confirm.setContentText(msg);
+
+        confirm.showAndWait().ifPresent(result -> {
+            if (result == javafx.scene.control.ButtonType.OK) {
+                exportPdf();
+            }
+        });
     }
 
     private void exportPdf() {
@@ -280,7 +384,19 @@ public class StudentScreen {
             writer.writeAnswersPdf(questions, out);
 
             updateStatus("Saved: " + out.getAbsolutePath());
-            TtsService.speak("Your answers have been saved. Thank you.");
+
+            TtsService.speak("Your answers have been saved. Thank you. "
+                    + "You may close the app now.");
+
+            javafx.scene.control.Alert done = new javafx.scene.control.Alert(
+                    javafx.scene.control.Alert.AlertType.INFORMATION);
+            done.setTitle("Submitted");
+            done.setHeaderText("Exam submitted");
+            done.setContentText("Saved to:\n" + out.getAbsolutePath());
+            done.showAndWait();
+
+            voice.stop();
+            App.navigate(new LandingScreen().build());
         } catch (Exception ex) {
             updateStatus("Export error: " + ex.getMessage());
         }
