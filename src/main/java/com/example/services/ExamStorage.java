@@ -129,4 +129,70 @@ public class ExamStorage {
         }
         return list;
     }
+
+    private static final String TEMPLATE_DIR = "D:/Projects/visa/templates";
+
+    /** Save a blank exam (questions only, no answers). */
+    public static File saveTemplate(String examTitle, List<Question> questions)
+            throws IOException {
+        Files.createDirectories(Path.of(TEMPLATE_DIR));
+        String safe = examTitle.replaceAll("[^a-zA-Z0-9_-]", "_");
+        File file = new File(TEMPLATE_DIR, safe + ".txt");
+
+        try (BufferedWriter w = new BufferedWriter(new FileWriter(file))) {
+            w.write("EXAM" + SEP + examTitle);
+            w.newLine();
+            w.write("---");
+            w.newLine();
+            for (Question q : questions) {
+                w.write("Q" + SEP + q.getNumber() + SEP
+                        + q.getText().replace("\n", " "));
+                w.newLine();
+            }
+        }
+        return file;
+    }
+
+    /** List all saved exam templates. */
+    public static List<String> listTemplates() {
+        List<String> list = new ArrayList<>();
+        File dir = new File(TEMPLATE_DIR);
+        if (!dir.exists())
+            return list;
+        File[] files = dir.listFiles((d, n) -> n.endsWith(".txt"));
+        if (files == null)
+            return list;
+        for (File f : files) {
+            list.add(f.getName().replaceAll("\\.txt$", ""));
+        }
+        return list;
+    }
+
+    /** Load a saved exam template by name (without extension). */
+    public static List<Question> loadTemplate(String examName) throws IOException {
+        File file = new File(TEMPLATE_DIR, examName + ".txt");
+        if (!file.exists())
+            return List.of();
+
+        List<Question> questions = new ArrayList<>();
+        boolean headerDone = false;
+
+        try (BufferedReader r = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = r.readLine()) != null) {
+                if (!headerDone) {
+                    if (line.equals("---")) {
+                        headerDone = true;
+                        continue;
+                    }
+                    continue;
+                }
+                String[] p = line.split(SEP, 3);
+                if (p.length < 3)
+                    continue;
+                questions.add(new Question(Integer.parseInt(p[1]), p[2]));
+            }
+        }
+        return questions;
+    }
 }
