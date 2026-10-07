@@ -8,20 +8,19 @@ import com.example.components.TranscriptionService;
 import com.example.components.VoiceCommandService;
 import com.example.models.Question;
 import com.example.services.ExamStorage;
-import com.example.services.PdfReaderService;
 import com.example.services.PdfWriterService;
 
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import javafx.stage.FileChooser;
 
 import java.io.File;
 import java.util.List;
@@ -29,13 +28,13 @@ import java.util.List;
 public class StudentScreen {
 
     private final AudioRecorder recorder = new AudioRecorder();
-    private final PdfReaderService reader = new PdfReaderService();
     private final PdfWriterService writer = new PdfWriterService();
     private final VoiceCommandService voice = new VoiceCommandService(MODEL_PATH);
 
     private List<Question> questions;
     private int currentIndex = 0;
     private boolean isRecording = false;
+    private String currentExamTitle = "Exam";
 
     private BigButton recordBtn;
     private BigButton nextBtn;
@@ -49,10 +48,16 @@ public class StudentScreen {
         Label title = new Label("Student Exam");
         title.setFont(Font.font("Arial", FontWeight.BOLD, 36));
 
-        status = new Label("Say 'load' or click Load Questions PDF to begin.");
+        status = new Label("Choose an exam from the list below.");
         status.setFont(Font.font("Arial", 18));
         status.setWrapText(true);
         status.setMaxWidth(800);
+
+        // Dropdown of teacher-uploaded exams
+        ComboBox<String> examPicker = new ComboBox<>();
+        examPicker.getItems().addAll(ExamStorage.listTemplates());
+        examPicker.setPromptText("Select an exam...");
+        examPicker.setPrefWidth(500);
 
         questionLabel = new Label("");
         questionLabel.setFont(Font.font("Arial", 22));
@@ -64,9 +69,6 @@ public class StudentScreen {
         transcript.setPrefHeight(150);
         transcript.setStyle("-fx-font-size: 18px;");
         transcript.setPromptText("Your spoken answer will appear here...");
-
-        BigButton loadBtn = new BigButton("Load Questions PDF");
-        loadBtn.setOnAction(e -> loadPdf());
 
         recordBtn = new BigButton("Start Answering");
         recordBtn.setDisable(true);
@@ -88,8 +90,21 @@ public class StudentScreen {
             App.navigate(new LandingScreen().build());
         });
 
-        VBox root = new VBox(16, title, status, questionLabel, transcript,
-                loadBtn, recordBtn, nextBtn, back);
+        // When teacher uploads a new exam while this screen is open, refresh
+        examPicker.setOnShowing(e -> {
+            examPicker.getItems().clear();
+            examPicker.getItems().addAll(ExamStorage.listTemplates());
+        });
+
+        examPicker.setOnAction(e -> {
+            String chosen = examPicker.getValue();
+            if (chosen == null)
+                return;
+            loadTemplate(chosen);
+        });
+
+        VBox root = new VBox(16, title, status, examPicker, questionLabel,
+                transcript, recordBtn, nextBtn, back);
         root.setAlignment(Pos.CENTER);
         root.setPadding(new Insets(30));
         root.setStyle("-fx-background-color: white;");
@@ -99,79 +114,72 @@ public class StudentScreen {
         try {
             voice.start();
         } catch (Exception ex) {
-            System.err.println("Voice listener failed to start: " + ex.getMessage());
+            System.err.println("Voice listener failed: " + ex.getMessage());
         }
 
         Platform.runLater(() -> TtsService.speak(
-                "Student exam ready. Say answer to begin, stop when you are done, "
-                        + "next for the next question, or repeat to hear the question again."));
+                "Student exam ready. Choose an exam from the list. " +
+                        "Then say answer to begin, stop when done, and next to continue."));
 
         return root;
     }
 
-    /** Central handler for voice commands. */
+    /** Loads a teacher-saved exam template. */
+    private void loadTemplate(String examName) {
+        try {
+            List<Question> qs = ExamStorage.loadTemplate(examName);
+            if (qs.isEmpty()) {
+                updateStatus("Exam '" + examName + "' has no questions.");
+                return;
+            }
+            questions = qs;
+            currentIndex = 0;
+            currentExamTitle = examName;
+
+            recordBtn.setDisable(false);
+            nextBtn.setDisable(true);
+            transcript.clear();
+
+            updateStatus("Loaded " + qs.size() + " questions from '" + examName + "'.");
+            askCurrentQuestion();
+        } catch (Exception ex) {
+            updateStatus("Load error: " + ex.getMessage());
+        }
+    }
+
     private void handleVoiceCommand(String command) {
         Platform.runLater(() -> {
             switch (command) {
                 case "answer":
-                    if (questions == null) {
-                        TtsService.speak("Please load the questions first.");
-                    } else if (!isRecording) {
+                    if (questions == null)
+                        TtsService.speak("Choose an exam first.");
+                    else if (!isRecording)
                         startRecording();
-                    }
                     break;
-
                 case "stop":
                     if (isRecording)
                         stopRecording();
                     break;
-
                 case "next":
                     if (!nextBtn.isDisabled())
                         goNext();
                     else
-                        TtsService.speak("You need to answer first.");
+                        TtsService.speak("Answer the current question first.");
                     break;
-
                 case "repeat":
                     if (questions != null) {
                         Question q = questions.get(currentIndex);
                         TtsService.speak("Question " + q.getNumber() + ". " + q.getText());
                     }
                     break;
-
                 case "finish":
-                    if (questions != null && currentIndex + 1 >= questions.size()) {
+                    if (questions != null && currentIndex + 1 >= questions.size())
                         exportPdf();
-                    } else {
+                    else
                         TtsService.speak("You still have more questions.");
-                    }
                     break;
             }
         });
-    }
-
-    private void loadPdf() {
-        File pdf = choosePdf();
-        if (pdf == null)
-            return;
-        try {
-            questions = reader.extractQuestions(pdf);
-            currentIndex = 0;
-            updateStatus("Loaded " + questions.size() + " questions.");
-            recordBtn.setDisable(false);
-            askCurrentQuestion();
-        } catch (Exception ex) {
-            updateStatus("Error reading PDF: " + ex.getMessage());
-        }
-    }
-
-    private File choosePdf() {
-        FileChooser fc = new FileChooser();
-        fc.setTitle("Choose Questions PDF");
-        fc.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("PDF Files", "*.pdf"));
-        return fc.showOpenDialog(null);
     }
 
     private void updateStatus(String text) {
@@ -184,21 +192,19 @@ public class StudentScreen {
         String prompt = "Question " + q.getNumber() + ". " + q.getText();
         questionLabel.setText(prompt);
         updateStatus("Question " + q.getNumber() + " of " + questions.size()
-                + ". Say 'answer' to start, or 'repeat' to hear it again.");
+                + ". Say 'answer' to begin, or 'repeat' to hear it again.");
         TtsService.speak(prompt + ". Say answer when you are ready.");
     }
 
     private void startRecording() {
         try {
-            // Pause command listener so the student's answer doesn't fire commands
             voice.pause();
-
             recorder.start();
             isRecording = true;
             recordBtn.setText("Stop Answering");
             updateStatus("Recording... speak your answer.");
             transcript.setText("(recording)");
-            TtsService.speak("Recording. Please speak. Say stop when you are done.");
+            TtsService.speak("Recording. Please speak. Say stop when done.");
         } catch (Exception ex) {
             voice.resume();
             updateStatus("Mic error: " + ex.getMessage());
@@ -225,8 +231,6 @@ public class StudentScreen {
                     Platform.runLater(() -> {
                         transcript.setText(text);
                         questions.get(currentIndex).setAnswer(text);
-
-                        // Resume command listener now that the answer is done
                         voice.resume();
 
                         String spoken = text.isBlank()
@@ -270,13 +274,13 @@ public class StudentScreen {
             dialog.setContentText("Name:");
             String name = dialog.showAndWait().orElse("Student");
 
-            ExamStorage.save(name, "Exam", questions);
+            ExamStorage.save(name, currentExamTitle, questions);
 
             File out = new File("D:/Projects/visa/answers_" + name + ".pdf");
             writer.writeAnswersPdf(questions, out);
 
             updateStatus("Saved: " + out.getAbsolutePath());
-            TtsService.speak("Your answers have been saved. Thank you. You may close the app now.");
+            TtsService.speak("Your answers have been saved. Thank you.");
         } catch (Exception ex) {
             updateStatus("Export error: " + ex.getMessage());
         }
