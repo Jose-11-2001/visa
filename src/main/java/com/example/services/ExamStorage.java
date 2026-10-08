@@ -12,7 +12,13 @@ import java.util.*;
  */
 public class ExamStorage {
 
-    private static final String DIR = "D:/Projects/visa/submissions";
+    // Cross-platform base directory: %APPDATA%\VIS Exam App
+    private static final String BASE_DIR = System.getenv("APPDATA") != null
+            ? System.getenv("APPDATA") + File.separator + "VIS Exam App"
+            : System.getProperty("user.home") + File.separator + "VIS Exam App";
+
+    private static final String DIR = BASE_DIR + File.separator + "submissions";
+    private static final String TEMPLATE_DIR = BASE_DIR + File.separator + "templates";
     private static final String SEP = "\t";
 
     /** Represents one saved submission. */
@@ -129,8 +135,6 @@ public class ExamStorage {
         }
         return list;
     }
-
-    private static final String TEMPLATE_DIR = "D:/Projects/visa/templates";
 
     /** Save a blank exam (questions only, no answers). */
     public static File saveTemplate(String examTitle, List<Question> questions)

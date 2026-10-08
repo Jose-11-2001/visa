@@ -378,7 +378,13 @@ public class StudentScreen {
 
             ExamStorage.save(name, currentExamTitle, questions);
 
-            File out = new File("D:/Projects/visa/answers_" + name + ".pdf");
+            // Save to the user's Documents folder (works on any machine)
+            String docs = System.getProperty("user.home") + File.separator + "Documents";
+            File dir = new File(docs);
+            if (!dir.exists())
+                dir.mkdirs();
+
+            File out = new File(dir, "answers_" + name + ".pdf");
             writer.writeAnswersPdf(questions, out);
 
             updateStatus("Saved: " + out.getAbsolutePath());
