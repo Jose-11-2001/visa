@@ -266,9 +266,7 @@ public class StudentScreen {
             new Thread(() -> {
                 try {
                     TranscriptionService ts = new TranscriptionService(modelPath);
-                    String text = ts.transcribe(
-                            audio,
-                            recorder.getActualFormat().getSampleRate());
+                    String text = ts.transcribe(audio, recorder.getActualFormat());
                     ts.close();
                     Platform.runLater(() -> {
                         transcript.setText(text);
