@@ -8,6 +8,7 @@ import com.example.components.TranscriptionService;
 import com.example.components.VoiceCommandService;
 import com.example.models.Question;
 import com.example.services.ExamStorage;
+import com.example.services.ModelLocator;
 import com.example.services.PdfWriterService;
 
 import javafx.application.Platform;
@@ -30,7 +31,8 @@ public class StudentScreen {
 
     private final AudioRecorder recorder = new AudioRecorder();
     private final PdfWriterService writer = new PdfWriterService();
-    private final VoiceCommandService voice = new VoiceCommandService(MODEL_PATH);
+    private final String modelPath = ModelLocator.findModelPath();
+    private final VoiceCommandService voice = new VoiceCommandService(modelPath);
 
     private List<Question> questions;
     private int currentIndex = 0;
@@ -44,8 +46,6 @@ public class StudentScreen {
     private Label questionLabel;
     private Label status;
     private TextArea transcript;
-
-    private static final String MODEL_PATH = "D:/Projects/visa/models/vosk-model-small-en-us-0.15";
 
     public Parent build() {
         Label title = new Label("Student Exam");
@@ -81,7 +81,6 @@ public class StudentScreen {
                 stopRecording();
         });
 
-        // NEW: replay the transcribed answer aloud
         hearBtn = BigButton.accent("Hear My Answer");
         hearBtn.setDisable(true);
         hearBtn.setOnAction(e -> hearMyAnswer());
@@ -90,7 +89,6 @@ public class StudentScreen {
         nextBtn.setDisable(true);
         nextBtn.setOnAction(e -> goNext());
 
-        // NEW: explicit "Finish & Submit" button (only on last question)
         finishBtn = BigButton.accent("Finish & Submit");
         finishBtn.setDisable(true);
         finishBtn.setOnAction(e -> confirmAndSubmit());
@@ -267,7 +265,7 @@ public class StudentScreen {
 
             new Thread(() -> {
                 try {
-                    TranscriptionService ts = new TranscriptionService(MODEL_PATH);
+                    TranscriptionService ts = new TranscriptionService(modelPath);
                     String text = ts.transcribe(
                             audio,
                             recorder.getActualFormat().getSampleRate());
