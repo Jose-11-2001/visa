@@ -11,7 +11,7 @@ import java.util.function.Consumer;
  * Continuously listens to the microphone and fires a callback when a
  * keyword is heard. Uses Vosk streaming recognition.
  *
- * Commands: "answer", "stop", "next", "repeat", "finish"
+ * Commands: "answer", "stop", "next", "repeat", "hear", "finish"
  */
 public class VoiceCommandService {
 
@@ -29,19 +29,17 @@ public class VoiceCommandService {
         this.onCommand = callback;
     }
 
-    /** Picks the best supported mic format on this system. */
+    /**
+     * Picks the best mic format that ACTUALLY opens on this system.
+     * Does not rely on isLineSupported(), which lies on Windows.
+     */
     private static AudioFormat pickVoiceFormat() {
         int[][] candidates = {
-                { 16000, 1, 16 },
-                { 16000, 2, 16 },
-                { 44100, 1, 16 },
-                { 44100, 2, 16 },
-                { 48000, 1, 16 },
-                { 48000, 2, 16 },
-                { 22050, 1, 16 },
-                { 22050, 2, 16 },
-                { 8000, 1, 16 },
-                { 8000, 2, 16 },
+                { 16000, 1, 16 }, { 16000, 2, 16 },
+                { 44100, 1, 16 }, { 44100, 2, 16 },
+                { 48000, 1, 16 }, { 48000, 2, 16 },
+                { 22050, 1, 16 }, { 22050, 2, 16 },
+                { 8000, 1, 16 }, { 8000, 2, 16 },
         };
 
         for (int[] c : candidates) {
@@ -49,21 +47,29 @@ public class VoiceCommandService {
             AudioFormat fmt = new AudioFormat(
                     AudioFormat.Encoding.PCM_SIGNED,
                     c[0], c[2], c[1], frameSize, c[0], false);
-            if (AudioSystem.isLineSupported(
-                    new DataLine.Info(TargetDataLine.class, fmt))) {
+            try {
+                TargetDataLine test = (TargetDataLine) AudioSystem
+                        .getLine(new DataLine.Info(TargetDataLine.class, fmt));
+                test.open(fmt);
+                test.close();
                 return fmt;
+            } catch (Exception ignored) {
             }
         }
 
-        // Last resort: ask the system what it offers
+        // Last resort: iterate every mixer's TargetDataLine
         for (Mixer.Info mi : AudioSystem.getMixerInfo()) {
             Mixer m = AudioSystem.getMixer(mi);
             for (Line.Info li : m.getTargetLineInfo()) {
-                if (li.getLineClass() == TargetDataLine.class
-                        && li instanceof DataLine.Info) {
-                    AudioFormat[] formats = ((DataLine.Info) li).getFormats();
-                    if (formats.length > 0)
-                        return formats[0];
+                if (li.getLineClass() == TargetDataLine.class) {
+                    try {
+                        TargetDataLine test = (TargetDataLine) m.getLine(li);
+                        test.open();
+                        AudioFormat fmt = test.getFormat();
+                        test.close();
+                        return fmt;
+                    } catch (Exception ignored) {
+                    }
                 }
             }
         }
