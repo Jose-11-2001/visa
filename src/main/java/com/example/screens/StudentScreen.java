@@ -37,12 +37,16 @@ public class StudentScreen {
     private List<Question> questions;
     private int currentIndex = 0;
     private boolean isRecording = false;
+    private boolean voiceModeEnabled = true; // voice commands on/off
     private String currentExamTitle = "Exam";
 
     private BigButton recordBtn;
     private BigButton nextBtn;
     private BigButton hearBtn;
     private BigButton finishBtn;
+    private BigButton skipBtn;
+    private BigButton voiceToggleBtn;
+    private BigButton speedBtn;
     private Label questionLabel;
     private Label status;
     private TextArea transcript;
@@ -85,6 +89,10 @@ public class StudentScreen {
         hearBtn.setDisable(true);
         hearBtn.setOnAction(e -> hearMyAnswer());
 
+        skipBtn = BigButton.accent("Skip Question");
+        skipBtn.setDisable(true);
+        skipBtn.setOnAction(e -> skipQuestion());
+
         nextBtn = BigButton.accent("Next Question");
         nextBtn.setDisable(true);
         nextBtn.setOnAction(e -> goNext());
@@ -93,8 +101,20 @@ public class StudentScreen {
         finishBtn.setDisable(true);
         finishBtn.setOnAction(e -> confirmAndSubmit());
 
-        HBox actionRow = new HBox(12, recordBtn, hearBtn, nextBtn, finishBtn);
+        speedBtn = BigButton.accent("Speed: Normal");
+        speedBtn.setOnAction(e -> cycleSpeed());
+
+        voiceToggleBtn = BigButton.accent("Voice: ON");
+        voiceToggleBtn.setOnAction(e -> toggleVoiceMode());
+
+        HBox actionRow = new HBox(10, recordBtn, hearBtn, skipBtn, nextBtn, finishBtn);
         actionRow.setAlignment(Pos.CENTER);
+
+        HBox controlRow = new HBox(10, voiceToggleBtn, speedBtn);
+        controlRow.setAlignment(Pos.CENTER);
+
+        BigButton helpBtn = BigButton.accent("Voice Commands");
+        helpBtn.setOnAction(e -> speakHelp());
 
         BigButton back = BigButton.accent("Back to Home");
         back.setOnAction(e -> {
@@ -102,6 +122,9 @@ public class StudentScreen {
             TtsService.stop();
             App.navigate(new LandingScreen().build());
         });
+
+        HBox bottomRow = new HBox(10, helpBtn, back);
+        bottomRow.setAlignment(Pos.CENTER);
 
         examPicker.setOnShowing(e -> {
             examPicker.getItems().clear();
@@ -115,10 +138,10 @@ public class StudentScreen {
             loadTemplate(chosen);
         });
 
-        VBox root = new VBox(14, title, status, examPicker, questionLabel,
-                transcript, actionRow, back);
+        VBox root = new VBox(12, title, status, examPicker, questionLabel,
+                transcript, actionRow, controlRow, bottomRow);
         root.setAlignment(Pos.CENTER);
-        root.setPadding(new Insets(30));
+        root.setPadding(new Insets(25));
         root.setStyle("-fx-background-color: white;");
 
         voice.setOnCommand(this::handleVoiceCommand);
@@ -126,14 +149,169 @@ public class StudentScreen {
             voice.start();
         } catch (Exception ex) {
             System.err.println("Voice listener failed: " + ex.getMessage());
+            updateStatus("Voice mode unavailable. Use the buttons.");
         }
 
         Platform.runLater(() -> TtsService.speak(
                 "Student exam ready. Choose an exam from the list. " +
-                        "Then say answer to begin, stop when done, and next to continue. " +
-                        "Say hear my answer to hear what was written."));
+                        "Say answer to begin, stop when done, next to continue, " +
+                        "skip to move on, or repeat to hear the question again. " +
+                        "Say help for all commands."));
 
         return root;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Voice command handling */
+    /* ------------------------------------------------------------------ */
+
+    private void handleVoiceCommand(String command) {
+        if (!voiceModeEnabled)
+            return;
+
+        Platform.runLater(() -> {
+            switch (command) {
+                case "answer":
+                    if (questions == null)
+                        TtsService.speak("Choose an exam first.");
+                    else if (!isRecording)
+                        startRecording();
+                    break;
+
+                case "stop":
+                    if (isRecording)
+                        stopRecording();
+                    break;
+
+                case "next":
+                    if (!nextBtn.isDisabled())
+                        goNext();
+                    else
+                        TtsService.speak("Answer the current question first, or say skip.");
+                    break;
+
+                case "skip":
+                    if (questions != null)
+                        skipQuestion();
+                    break;
+
+                case "previous":
+                    if (questions != null && currentIndex > 0) {
+                        currentIndex--;
+                        transcript.clear();
+                        askCurrentQuestion();
+                    } else {
+                        TtsService.speak("This is the first question.");
+                    }
+                    break;
+
+                case "repeat":
+                    if (questions != null) {
+                        Question q = questions.get(currentIndex);
+                        TtsService.speak("Question " + q.getNumber() + ". " + q.getText());
+                    }
+                    break;
+
+                case "hear":
+                    hearMyAnswer();
+                    break;
+
+                case "slower":
+                    TtsService.slowDown();
+                    updateSpeedLabel();
+                    TtsService.speak("Speed now " + describeSpeed());
+                    break;
+
+                case "faster":
+                    TtsService.speedUp();
+                    updateSpeedLabel();
+                    TtsService.speak("Speed now " + describeSpeed());
+                    break;
+
+                case "normal":
+                    TtsService.resetSpeed();
+                    updateSpeedLabel();
+                    TtsService.speak("Speed reset to normal.");
+                    break;
+
+                case "submit":
+                    if (!finishBtn.isDisabled())
+                        confirmAndSubmit();
+                    else
+                        TtsService.speak("You still have more questions.");
+                    break;
+
+                case "help":
+                    speakHelp();
+                    break;
+
+                case "toggle":
+                    toggleVoiceMode();
+                    break;
+
+                case "yes":
+                    break;
+
+                case "no":
+                    break;
+            }
+        });
+    }
+
+    private void toggleVoiceMode() {
+        voiceModeEnabled = !voiceModeEnabled;
+        if (voiceModeEnabled) {
+            voice.resume();
+            voiceToggleBtn.setText("Voice: ON");
+            TtsService.speak("Voice commands enabled.");
+        } else {
+            voice.pause();
+            voiceToggleBtn.setText("Voice: OFF");
+            TtsService.speak("Voice commands disabled. Use the buttons.");
+        }
+    }
+
+    private void cycleSpeed() {
+        int r = TtsService.getRate();
+        if (r < -4)
+            TtsService.setRate(0);
+        else if (r < 0)
+            TtsService.setRate(4);
+        else if (r < 4)
+            TtsService.setRate(-4);
+        else
+            TtsService.setRate(0);
+        updateSpeedLabel();
+        TtsService.speak("Speed now " + describeSpeed());
+    }
+
+    private void updateSpeedLabel() {
+        speedBtn.setText("Speed: " + describeSpeed());
+    }
+
+    private String describeSpeed() {
+        int r = TtsService.getRate();
+        if (r <= -4)
+            return "Slow";
+        if (r >= 4)
+            return "Fast";
+        return "Normal";
+    }
+
+    private void speakHelp() {
+        TtsService.speak(
+                "Available voice commands. " +
+                        "Say answer to start recording. " +
+                        "Say stop when you finish speaking. " +
+                        "Say next to move to the next question. " +
+                        "Say skip to skip this question. " +
+                        "Say previous to go back. " +
+                        "Say repeat to hear the question again. " +
+                        "Say hear my answer to hear what was written. " +
+                        "Say slower or faster to change my speech speed. " +
+                        "Say normal to reset the speed. " +
+                        "Say finish or submit when you are done. " +
+                        "Say voice off to use buttons only, or voice on to re-enable.");
     }
 
     /* ------------------------------------------------------------------ */
@@ -154,6 +332,7 @@ public class StudentScreen {
             recordBtn.setDisable(false);
             nextBtn.setDisable(true);
             hearBtn.setDisable(true);
+            skipBtn.setDisable(false);
             finishBtn.setDisable(true);
             transcript.clear();
 
@@ -162,49 +341,6 @@ public class StudentScreen {
         } catch (Exception ex) {
             updateStatus("Load error: " + ex.getMessage());
         }
-    }
-
-    /* ------------------------------------------------------------------ */
-    /* Voice commands */
-    /* ------------------------------------------------------------------ */
-
-    private void handleVoiceCommand(String command) {
-        Platform.runLater(() -> {
-            switch (command) {
-                case "answer":
-                    if (questions == null)
-                        TtsService.speak("Choose an exam first.");
-                    else if (!isRecording)
-                        startRecording();
-                    break;
-                case "stop":
-                    if (isRecording)
-                        stopRecording();
-                    break;
-                case "next":
-                    if (!nextBtn.isDisabled())
-                        goNext();
-                    else
-                        TtsService.speak("Answer the current question first.");
-                    break;
-                case "repeat":
-                    if (questions != null) {
-                        Question q = questions.get(currentIndex);
-                        TtsService.speak("Question " + q.getNumber() + ". " + q.getText());
-                    }
-                    break;
-                case "hear":
-                    hearMyAnswer();
-                    break;
-                case "finish":
-                case "submit":
-                    if (!finishBtn.isDisabled())
-                        confirmAndSubmit();
-                    else
-                        TtsService.speak("You still have more questions.");
-                    break;
-            }
-        });
     }
 
     /* ------------------------------------------------------------------ */
@@ -223,10 +359,12 @@ public class StudentScreen {
 
         boolean isLast = (currentIndex + 1 >= questions.size());
         finishBtn.setDisable(!isLast);
+        hearBtn.setDisable(true);
+        nextBtn.setDisable(true);
 
         updateStatus("Question " + q.getNumber() + " of " + questions.size()
-                + (isLast ? " (last question). Say finish to submit." : "")
-                + ". Say 'answer' to begin, or 'repeat' to hear it again.");
+                + (isLast ? " (last question)." : "")
+                + " Say answer to begin, repeat to hear again, or skip.");
 
         TtsService.speak(prompt
                 + (isLast
@@ -250,7 +388,7 @@ public class StudentScreen {
         } catch (Exception ex) {
             voice.resume();
             updateStatus("Mic error: " + ex.getMessage());
-            TtsService.speak("Microphone error.");
+            TtsService.speak("Microphone not available. Use the Skip button to move on.");
         }
     }
 
@@ -276,9 +414,8 @@ public class StudentScreen {
                         hearBtn.setDisable(text.isBlank());
 
                         String spoken = text.isBlank()
-                                ? "I did not catch anything. Say answer to try again."
-                                : "You said: " + text + ". Say next to continue, "
-                                        + "or say hear my answer to hear it again.";
+                                ? "I did not catch anything. Say answer to try again, or skip."
+                                : "You said: " + text + ". Say next to continue, hear to listen again, or skip.";
 
                         updateStatus(spoken);
                         TtsService.speak(spoken);
@@ -321,6 +458,28 @@ public class StudentScreen {
     /* Navigation */
     /* ------------------------------------------------------------------ */
 
+    private void skipQuestion() {
+        if (questions == null)
+            return;
+
+        // Mark as unanswered (blank) and move forward
+        questions.get(currentIndex).setAnswer("");
+        transcript.clear();
+
+        if (currentIndex + 1 >= questions.size()) {
+            TtsService.speak("Skipped last question. Say finish to submit.");
+            finishBtn.setDisable(false);
+            nextBtn.setDisable(true);
+            return;
+        }
+
+        currentIndex++;
+        nextBtn.setDisable(true);
+        hearBtn.setDisable(true);
+        finishBtn.setDisable(true);
+        askCurrentQuestion();
+    }
+
     private void goNext() {
         if (currentIndex + 1 >= questions.size()) {
             confirmAndSubmit();
@@ -348,8 +507,7 @@ public class StudentScreen {
 
         String msg = unanswered == 0
                 ? "All questions answered. Submit the exam now?"
-                : "You still have " + unanswered + " unanswered question(s). "
-                        + "Submit anyway?";
+                : "You still have " + unanswered + " unanswered question(s). Submit anyway?";
 
         TtsService.speak(msg);
 
@@ -360,9 +518,8 @@ public class StudentScreen {
         confirm.setContentText(msg);
 
         confirm.showAndWait().ifPresent(result -> {
-            if (result == javafx.scene.control.ButtonType.OK) {
+            if (result == javafx.scene.control.ButtonType.OK)
                 exportPdf();
-            }
         });
     }
 
@@ -376,7 +533,6 @@ public class StudentScreen {
 
             ExamStorage.save(name, currentExamTitle, questions);
 
-            // Save to the user's Documents folder (works on any machine)
             String docs = System.getProperty("user.home") + File.separator + "Documents";
             File dir = new File(docs);
             if (!dir.exists())
@@ -386,9 +542,7 @@ public class StudentScreen {
             writer.writeAnswersPdf(questions, out);
 
             updateStatus("Saved: " + out.getAbsolutePath());
-
-            TtsService.speak("Your answers have been saved. Thank you. "
-                    + "You may close the app now.");
+            TtsService.speak("Your answers have been saved. Thank you. You may close the app now.");
 
             javafx.scene.control.Alert done = new javafx.scene.control.Alert(
                     javafx.scene.control.Alert.AlertType.INFORMATION);

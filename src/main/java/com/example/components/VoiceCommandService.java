@@ -11,7 +11,8 @@ import java.util.function.Consumer;
  * Continuously listens to the microphone and fires a callback when a
  * keyword is heard. Uses Vosk streaming recognition.
  *
- * Commands: "answer", "stop", "next", "repeat", "hear", "finish"
+ * Commands: answer, stop, next, skip, previous, repeat, hear,
+ * slower, faster, normal, submit, help, toggle, yes, no
  */
 public class VoiceCommandService {
 
@@ -171,23 +172,47 @@ public class VoiceCommandService {
         return (short) ((left + right) / 2);
     }
 
+    /** Maps a recognized phrase to a command. Only ONE version of this method. */
     private void handlePhrase(String text) {
         if (onCommand == null)
             return;
 
         String command = null;
-        if (containsWord(text, "answer") || containsWord(text, "start")) {
+
+        if (containsWord(text, "answer") || containsWord(text, "start")
+                || containsWord(text, "record")) {
             command = "answer";
-        } else if (containsWord(text, "stop") || containsWord(text, "done")) {
+        } else if (containsWord(text, "stop") || containsWord(text, "done")
+                || containsWord(text, "end")) {
             command = "stop";
-        } else if (containsWord(text, "next")) {
+        } else if (containsWord(text, "next") || containsWord(text, "forward")) {
             command = "next";
-        } else if (containsWord(text, "repeat")) {
+        } else if (containsWord(text, "skip") || containsWord(text, "pass")) {
+            command = "skip";
+        } else if (containsWord(text, "previous") || containsWord(text, "back")) {
+            command = "previous";
+        } else if (containsWord(text, "repeat") || containsWord(text, "again")
+                || containsWord(text, "read")) {
             command = "repeat";
-        } else if (containsWord(text, "hear")) {
+        } else if (containsWord(text, "hear") || containsWord(text, "play")) {
             command = "hear";
-        } else if (containsWord(text, "finish") || containsWord(text, "submit")) {
-            command = "finish";
+        } else if (containsWord(text, "slower") || containsWord(text, "slow")) {
+            command = "slower";
+        } else if (containsWord(text, "faster") || containsWord(text, "fast")) {
+            command = "faster";
+        } else if (containsWord(text, "normal") || containsWord(text, "reset")) {
+            command = "normal";
+        } else if (containsWord(text, "submit") || containsWord(text, "send")
+                || containsWord(text, "finish")) {
+            command = "submit";
+        } else if (containsWord(text, "help") || containsWord(text, "commands")) {
+            command = "help";
+        } else if (containsWord(text, "voice") || containsWord(text, "button")) {
+            command = "toggle";
+        } else if (containsWord(text, "yes") || containsWord(text, "confirm")) {
+            command = "yes";
+        } else if (containsWord(text, "no") || containsWord(text, "cancel")) {
+            command = "no";
         }
 
         if (command != null) {
