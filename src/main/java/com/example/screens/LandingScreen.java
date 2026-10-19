@@ -17,16 +17,20 @@ public class LandingScreen {
         title.setFont(Font.font("Arial", FontWeight.BOLD, 48));
 
         Label subtitle = new Label(
-                "Accessible exams for visually impaired students");
+                "Accessible learning and exams for visually impaired students");
         subtitle.setFont(Font.font("Arial", 20));
         subtitle.setStyle("-fx-text-fill: #555;");
 
-        BigButton studentBtn = new BigButton("I am a Student");
+        BigButton studyBtn = new BigButton("Study Notes (Read PDF)");
+        studyBtn.setOnAction(e -> App.navigate(new StudyScreen().build()));
+
+        BigButton studentBtn = new BigButton("Take Exam");
         studentBtn.setOnAction(e -> App.navigate(new StudentScreen().build()));
+
         BigButton teacherBtn = BigButton.accent("I am a Teacher");
         teacherBtn.setOnAction(e -> App.navigate(new TeacherScreen().build()));
 
-        VBox root = new VBox(24, title, subtitle, studentBtn, teacherBtn);
+        VBox root = new VBox(20, title, subtitle, studyBtn, studentBtn, teacherBtn);
         root.setAlignment(Pos.CENTER);
         root.setPadding(new Insets(60));
         root.setStyle("-fx-background-color: white;");
