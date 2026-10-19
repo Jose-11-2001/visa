@@ -10,9 +10,6 @@ import java.util.function.Consumer;
 /**
  * Continuously listens to the microphone and fires a callback when a
  * keyword is heard. Uses Vosk streaming recognition.
- *
- * Commands: answer, stop, next, skip, previous, repeat, hear,
- * slower, faster, normal, submit, help, toggle, yes, no
  */
 public class VoiceCommandService {
 
@@ -179,6 +176,7 @@ public class VoiceCommandService {
 
         String command = null;
 
+        // --- COMMAND MATCHING ---
         if (containsWord(text, "answer") || containsWord(text, "start")
                 || containsWord(text, "record")) {
             command = "answer";
