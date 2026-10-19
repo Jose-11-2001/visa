@@ -3,6 +3,7 @@ com\example\components\VoiceCommandService.class
 com\example\models\Question.class
 com\example\services\ExamStorage.class
 com\example\services\PdfWriterService.class
+com\example\screens\StudyScreen.class
 com\example\SystemInfo.class
 com\example\screens\TeacherScreen.class
 com\example\services\ModelLocator.class
