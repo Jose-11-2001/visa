@@ -10,6 +10,11 @@ import java.util.function.Consumer;
 /**
  * Continuously listens to the microphone and fires a callback when a
  * keyword is heard. Uses Vosk streaming recognition.
+ *
+ * Improvements over the original:
+ *  - Per-frame noise gate removes background hum / fan / hiss
+ *  - Gentle auto-gain normalizes quiet speakers
+ *  - Vosk endpointer segments utterances more cleanly
  */
 public class VoiceCommandService {
 
@@ -18,6 +23,12 @@ public class VoiceCommandService {
     private volatile boolean running;
     private Consumer<String> onCommand;
     private volatile boolean paused;
+
+    // ---- Noise gate / gain tunables (16-bit signed PCM, values 0..32767) ----
+    private static final int    NOISE_FLOOR   = 220;   // below this = silence
+    private static final double TARGET_RMS    = 0.08;  // desired frame energy
+    private static final double MIN_GAIN      = 0.75;  // never attenuate much
+    private static final double MAX_GAIN      = 3.0;   // never amplify too much
 
     public VoiceCommandService(String modelPath) {
         this.modelPath = modelPath;
@@ -83,6 +94,13 @@ public class VoiceCommandService {
         Model model = new Model(modelPath);
         Recognizer recognizer = new Recognizer(model, 16000);
 
+        // Smoother utterance boundaries: Vosk returns a result after ~0.4s of silence
+        try {
+            recognizer.setEndpointer(0.4);
+        } catch (Throwable ignored) {
+            // Older Vosk versions don't have this — safe to ignore.
+        }
+
         AudioFormat chosenFormat = pickVoiceFormat();
         DataLine.Info info = new DataLine.Info(TargetDataLine.class, chosenFormat);
         TargetDataLine mic = (TargetDataLine) AudioSystem.getLine(info);
@@ -92,11 +110,16 @@ public class VoiceCommandService {
         running = true;
         final float sourceRate = chosenFormat.getSampleRate();
         final int channels = chosenFormat.getChannels();
+        final int sampleBytes = chosenFormat.getSampleSizeInBits() / 8;
 
         System.out.println(">>> Voice listener format: " + chosenFormat);
 
         listenerThread = new Thread(() -> {
-            byte[] buf = new byte[4096];
+            // Use ~30ms chunks so the noise gate has enough samples to work with
+            int chunkBytes = (int) (sourceRate * 0.03f) * sampleBytes * channels;
+            if (chunkBytes < 512) chunkBytes = 512;
+            byte[] buf = new byte[chunkBytes];
+
             try {
                 while (running) {
                     int n = mic.read(buf, 0, buf.length);
@@ -105,9 +128,13 @@ public class VoiceCommandService {
                     if (paused)
                         continue;
 
+                    // 1) Noise gate + auto-gain on the RAW buffer (before resampling)
+                    byte[] cleaned = denoise(buf, n, sampleBytes, channels);
+
+                    // 2) Resample to 16 kHz mono
                     byte[] audio16k = (sourceRate == 16000f && channels == 1)
-                            ? java.util.Arrays.copyOf(buf, n)
-                            : resample(buf, n, sourceRate, channels, 16000f);
+                            ? cleaned
+                            : resample(cleaned, cleaned.length, sourceRate, channels, 16000f);
 
                     if (recognizer.acceptWaveForm(audio16k, audio16k.length)) {
                         String json = recognizer.getResult();
@@ -132,6 +159,59 @@ public class VoiceCommandService {
         }, "voice-command-listener");
         listenerThread.setDaemon(true);
         listenerThread.start();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Noise gate + auto-gain                                             */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Applies a noise gate and gentle auto-gain to a PCM-16 buffer.
+     * Samples below NOISE_FLOOR become 0 (kills background hum),
+     * and remaining speech is scaled toward TARGET_RMS so quiet
+     * speakers are still recognized by Vosk.
+     */
+    private byte[] denoise(byte[] input, int length, int sampleBytes, int channels) {
+        int samples = length / sampleBytes;
+        byte[] out = new byte[length];
+        if (samples == 0)
+            return out;
+
+        // ---- 1) Compute frame RMS on raw samples ----
+        long sum = 0;
+        for (int i = 0; i < samples; i++) {
+            int off = i * sampleBytes;
+            short s = (short) ((input[off] & 0xFF) | ((sampleBytes >= 2 ? input[off + 1] : 0) << 8));
+            sum += (long) s * s;
+        }
+        double rms = Math.sqrt(sum / (double) samples);
+
+        // If frame is pure silence, return silence immediately
+        if (rms < NOISE_FLOOR) {
+            return out; // already all zeros
+        }
+
+        // ---- 2) Compute gain to hit target RMS ----
+        double targetRmsAbs = TARGET_RMS * 32768.0;
+        double gain = targetRmsAbs / rms;
+        gain = Math.max(MIN_GAIN, Math.min(MAX_GAIN, gain));
+
+        // ---- 3) Apply gain + noise gate ----
+        for (int i = 0; i < samples; i++) {
+            int off = i * sampleBytes;
+            short s = (short) ((input[off] & 0xFF) | ((sampleBytes >= 2 ? input[off + 1] : 0) << 8));
+
+            int v = (int) (s * gain);
+            if (Math.abs(v) < NOISE_FLOOR) {
+                v = 0; // gate
+            }
+            if (v > 32767)  v = 32767;
+            if (v < -32768) v = -32768;
+
+            out[off] = (byte) (v & 0xFF);
+            out[off + 1] = (byte) ((v >> 8) & 0xFF);
+        }
+        return out;
     }
 
     /** Converts any PCM buffer to 16 kHz mono. */
@@ -246,9 +326,4 @@ public class VoiceCommandService {
             }
         }
     }
-}private static final int NOISE_FLOOR = 220;
-for (int i = 0; i < samples.length; i++) {
-    int v = (int) (samples[i] * gain);
-    if (Math.abs(v) < NOISE_FLOOR) v = 0;
-    ...
 }
