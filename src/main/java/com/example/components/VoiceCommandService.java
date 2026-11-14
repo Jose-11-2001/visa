@@ -246,4 +246,9 @@ public class VoiceCommandService {
             }
         }
     }
+}private static final int NOISE_FLOOR = 220;
+for (int i = 0; i < samples.length; i++) {
+    int v = (int) (samples[i] * gain);
+    if (Math.abs(v) < NOISE_FLOOR) v = 0;
+    ...
 }

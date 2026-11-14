@@ -155,4 +155,8 @@ public class TranscriptionService {
     public void close() {
         model.close();
     }
+}try (Recognizer recognizer = new Recognizer(model, 16000)) {
+    recognizer.setEndpointer(0.4); // 400ms silence → end of utterance
+    recognizer.acceptWaveForm(audio16k, audio16k.length);
+    return extractText(recognizer.getFinalResult());
 }

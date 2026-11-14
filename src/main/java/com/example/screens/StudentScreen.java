@@ -40,6 +40,9 @@ public class StudentScreen {
     private boolean voiceModeEnabled = true; // voice commands on/off
     private String currentExamTitle = "Exam";
 
+    // VAD live meter throttle (so we don't spam the UI thread)
+    private long lastLevelUiUpdate = 0L;
+
     private BigButton recordBtn;
     private BigButton nextBtn;
     private BigButton hearBtn;
@@ -373,18 +376,40 @@ public class StudentScreen {
     }
 
     /* ------------------------------------------------------------------ */
-    /* Recording */
+    /* Recording  (VAD-aware)                                              */
     /* ------------------------------------------------------------------ */
 
     private void startRecording() {
         try {
             voice.pause();
+
+            // Live level meter: update status label ~10x per second while listening.
+            // Once speech begins, show "Recording…"; before that, show "Listening…".
+            recorder.setLevelListener(rms -> {
+                long now = System.currentTimeMillis();
+                if (now - lastLevelUiUpdate < 100) return;   // throttle UI
+                lastLevelUiUpdate = now;
+                int pct = (int) Math.round(Math.min(1.0, rms * 400)); // 0–100 ish
+                Platform.runLater(() -> {
+                    if (isRecording)
+                        status.setText("Listening… speak now.  [level " + pct + "%]");
+                });
+            });
+
+            // Auto-stop when VAD detects silence after speech.
+            recorder.setOnAutoStop(() -> Platform.runLater(() -> {
+                if (isRecording) {
+                    TtsService.stop(); // don't let "listening" TTS overlap result
+                    stopRecording();
+                }
+            }));
+
             recorder.start();
             isRecording = true;
             recordBtn.setText("Stop Answering");
-            updateStatus("Recording... speak your answer.");
-            transcript.setText("(recording)");
-            TtsService.speak("Recording. Please speak. Say stop when done.");
+            updateStatus("Listening… start speaking when ready.");
+            transcript.setText("");
+            TtsService.speak("Listening. Please speak. I will stop automatically when you finish.");
         } catch (Exception ex) {
             voice.resume();
             updateStatus("Mic error: " + ex.getMessage());
