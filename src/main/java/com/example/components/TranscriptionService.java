@@ -29,6 +29,13 @@ public class TranscriptionService {
         byte[] audio16k = toVoskFormat(pcmAudio, format);
 
         try (Recognizer recognizer = new Recognizer(model, 16000)) {
+            // Segment on ~0.4s of trailing silence — gives cleaner final result.
+            // Wrapped in try/catch so older Vosk jars (no setEndpointer) still work.
+            try {
+                recognizer.setEndpointer(0.4);
+            } catch (Throwable ignored) {
+            }
+
             recognizer.acceptWaveForm(audio16k, audio16k.length);
             return extractText(recognizer.getFinalResult());
         }
@@ -155,8 +162,4 @@ public class TranscriptionService {
     public void close() {
         model.close();
     }
-}try (Recognizer recognizer = new Recognizer(model, 16000)) {
-    recognizer.setEndpointer(0.4); // 400ms silence → end of utterance
-    recognizer.acceptWaveForm(audio16k, audio16k.length);
-    return extractText(recognizer.getFinalResult());
 }
