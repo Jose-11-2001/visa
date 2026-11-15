@@ -14,7 +14,6 @@ import java.util.function.Consumer;
  * Improvements over the original:
  *  - Per-frame noise gate removes background hum / fan / hiss
  *  - Gentle auto-gain normalizes quiet speakers
- *  - Vosk endpointer segments utterances more cleanly
  */
 public class VoiceCommandService {
 
@@ -93,13 +92,6 @@ public class VoiceCommandService {
 
         Model model = new Model(modelPath);
         Recognizer recognizer = new Recognizer(model, 16000);
-
-        // Smoother utterance boundaries: Vosk returns a result after ~0.4s of silence
-        try {
-            recognizer.setEndpointer(0.4);
-        } catch (Throwable ignored) {
-            // Older Vosk versions don't have this — safe to ignore.
-        }
 
         AudioFormat chosenFormat = pickVoiceFormat();
         DataLine.Info info = new DataLine.Info(TargetDataLine.class, chosenFormat);
