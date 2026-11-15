@@ -2,6 +2,8 @@ package com.example.components;
 
 import javax.sound.sampled.*;
 import java.io.ByteArrayOutputStream;
+import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.function.Consumer;
 
 public class AudioRecorder {
@@ -19,6 +21,7 @@ public class AudioRecorder {
     private static final long   SILENCE_STOP_MS  = 1800;    // auto-stop after this much silence
     private static final long   MAX_RECORD_MS    = 60_000;  // safety cap
     private static final double TARGET_RMS       = 0.10;    // auto-gain target
+    private static final int    NOISE_FLOOR      = 220;     // noise gate (16-bit scale)
 
     private Consumer<Double> levelListener;   // optional: report current level for UI
     private Runnable onAutoStop;              // optional: notify when silence auto-stops
@@ -101,9 +104,9 @@ public class AudioRecorder {
         long lastSpeechAt = 0;
         long startedAt = 0;
 
-        // We pre-buffer frames BEFORE speech triggers, so the first word isn't cut off
+        // Pre-buffer frames BEFORE speech triggers so the first word isn't cut off
         final int PRE_BUFFER_FRAMES = 5;   // 5 × ~30ms ≈ 150ms of pre-roll
-        java.util.ArrayDeque<byte[]> preBuffer = new java.util.ArrayDeque<>();
+        ArrayDeque<byte[]> preBuffer = new ArrayDeque<>();
 
         while (running) {
             int n = line.read(frame, 0, frame.length);
@@ -119,8 +122,7 @@ public class AudioRecorder {
                     loudFrames = 0;
                 }
 
-                // Keep a rolling pre-buffer so the start isn't clipped
-                preBuffer.addLast(java.util.Arrays.copyOf(frame, n));
+                preBuffer.addLast(Arrays.copyOf(frame, n));
                 while (preBuffer.size() > PRE_BUFFER_FRAMES) preBuffer.removeFirst();
 
                 if (loudFrames >= START_FRAMES) {
@@ -133,10 +135,10 @@ public class AudioRecorder {
                     System.out.println(">>> VAD: speech detected, capturing...");
                 }
             } else {
-                // Already capturing: apply auto-gain and write
+                // Already capturing: apply auto-gain + noise gate, then write
                 short[] samples = bytesToShorts(frame, n, bytesPerSample);
-                applyAutoGain(samples, channels);
-                short[]ToBytes(samples, frame, n);
+                applyAutoGain(samples);
+                shortsToBytes(samples, frame);
                 audioBuffer.write(frame, 0, n);
 
                 if (rms > SPEECH_STOP_RMS) {
@@ -168,7 +170,6 @@ public class AudioRecorder {
         }
         if (count == 0) return 0;
         double mean = sum / (double) count;
-        // 32768 = max amplitude → normalize
         return Math.sqrt(mean) / 32768.0;
     }
 
@@ -182,7 +183,7 @@ public class AudioRecorder {
         return out;
     }
 
-    private void short[]ToBytes(short[] in, byte[] out, int len) {
+    private void shortsToBytes(short[] in, byte[] out) {
         for (int i = 0; i < in.length; i++) {
             out[i * 2]     = (byte) (in[i] & 0xFF);
             out[i * 2 + 1] = (byte) ((in[i] >> 8) & 0xFF);
@@ -190,12 +191,10 @@ public class AudioRecorder {
     }
 
     /**
-     * Auto-gain: adapt the user's speaking volume toward a target.
-     * Applies a gentle per-frame gain so quiet voices are boosted,
-     * loud voices aren't clipped, and background noise isn't amplified.
+     * Auto-gain + noise gate. Adapts the user's speaking volume toward a target
+     * and zeroes samples below the noise floor so background hum is removed.
      */
-    private void applyAutoGain(short[] samples, int channels) {
-        // Compute frame RMS
+    private void applyAutoGain(short[] samples) {
         double sum = 0;
         for (short s : samples) sum += (double) s * s;
         double rms = Math.sqrt(sum / Math.max(1, samples.length)) / 32768.0;
@@ -207,6 +206,7 @@ public class AudioRecorder {
 
         for (int i = 0; i < samples.length; i++) {
             int v = (int) (samples[i] * gain);
+            if (Math.abs(v) < NOISE_FLOOR) v = 0; // gate
             if (v > 32767) v = 32767;
             if (v < -32768) v = -32768;
             samples[i] = (short) v;
